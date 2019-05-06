@@ -1,0 +1,3 @@
+[submodule "local/boostnavigation"]
+	path = local/boostnavigation
+	url = https://github.com/moodleuulm/moodle-local_boostnavigation
