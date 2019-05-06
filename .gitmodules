@@ -1,3 +1,7 @@
 [submodule "local/boostnavigation"]
 	path = local/boostnavigation
 	url = https://github.com/moodleuulm/moodle-local_boostnavigation
+[submodule "mod/codesnippet"]
+	path = mod/codesnippet
+	url = https://github.com/StoryBB/moodle-mod_codesnippet
+	branch = MOODLE-36-STABLE
