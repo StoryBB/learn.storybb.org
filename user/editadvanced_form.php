@@ -99,6 +99,7 @@ class user_editadvanced_form extends moodleform {
 
         $purpose = user_edit_map_field_purpose($userid, 'username');
         $mform->addElement('text', 'username', get_string('username'), 'size="20"' . $purpose);
+        $mform->addRule('username', get_string('required'), 'required', null, 'client');
         $mform->addHelpButton('username', 'username', 'auth');
         $mform->setType('username', PARAM_RAW);
 
@@ -298,9 +299,18 @@ class user_editadvanced_form extends moodleform {
         if (!$user or (isset($usernew->email) && $user->email !== $usernew->email)) {
             if (!validate_email($usernew->email)) {
                 $err['email'] = get_string('invalidemail');
-            } else if (empty($CFG->allowaccountssameemail)
-                    and $DB->record_exists('user', array('email' => $usernew->email, 'mnethostid' => $CFG->mnet_localhost_id))) {
-                $err['email'] = get_string('emailexists');
+            } else if (empty($CFG->allowaccountssameemail)) {
+                // Make a case-insensitive query for the given email address.
+                $select = $DB->sql_equal('email', ':email', false) . ' AND mnethostid = :mnethostid AND id <> :userid';
+                $params = array(
+                    'email' => $usernew->email,
+                    'mnethostid' => $CFG->mnet_localhost_id,
+                    'userid' => $usernew->id
+                );
+                // If there are other user(s) that already have the same email, show an error.
+                if ($DB->record_exists_select('user', $select, $params)) {
+                    $err['email'] = get_string('emailexists');
+                }
             }
         }
 

@@ -3426,7 +3426,9 @@ class core_course_courselib_testcase extends advanced_testcase {
     }
 
     /**
-     * Test reset_course_userdata() with reset_roles_overrides enabled.
+     * Test reset_course_userdata()
+     *    - with reset_roles_overrides enabled
+     *    - with selective role unenrolments
      */
     public function test_course_roles_reset() {
         global $DB;
@@ -3441,6 +3443,7 @@ class core_course_courselib_testcase extends advanced_testcase {
         $roleid = $DB->get_field('role', 'id', array('shortname' => 'student'), MUST_EXIST);
         $generator->enrol_user($user->id, $course->id, $roleid);
 
+        // Test case with reset_roles_overrides enabled.
         // Override course so it does NOT allow students 'mod/forum:viewdiscussion'.
         $coursecontext = context_course::instance($course->id);
         assign_capability('mod/forum:viewdiscussion', CAP_PREVENT, $roleid, $coursecontext->id);
@@ -3456,6 +3459,39 @@ class core_course_courselib_testcase extends advanced_testcase {
 
         // Check new expected capabilities - override at the course level should be reset.
         $this->assertTrue(has_capability('mod/forum:viewdiscussion', $coursecontext, $user));
+
+        // Test case with selective role unenrolments.
+        $roles = array();
+        $roles['student'] = $DB->get_field('role', 'id', array('shortname' => 'student'), MUST_EXIST);
+        $roles['teacher'] = $DB->get_field('role', 'id', array('shortname' => 'teacher'), MUST_EXIST);
+
+        // We enrol a user with student and teacher roles.
+        $generator->enrol_user($user->id, $course->id, $roles['student']);
+        $generator->enrol_user($user->id, $course->id, $roles['teacher']);
+
+        // When we reset only student role, we expect to keep teacher role.
+        $resetdata = new stdClass();
+        $resetdata->id = $course->id;
+        $resetdata->unenrol_users = array($roles['student']);
+        reset_course_userdata($resetdata);
+
+        $usersroles = enrol_get_course_users_roles($course->id);
+        $this->assertArrayHasKey($user->id, $usersroles);
+        $this->assertArrayHasKey($roles['teacher'], $usersroles[$user->id]);
+        $this->assertArrayNotHasKey($roles['student'], $usersroles[$user->id]);
+        $this->assertCount(1, $usersroles[$user->id]);
+
+        // We reenrol user as student.
+        $generator->enrol_user($user->id, $course->id, $roles['student']);
+
+        // When we reset student and teacher roles, we expect no roles left.
+        $resetdata = new stdClass();
+        $resetdata->id = $course->id;
+        $resetdata->unenrol_users = array($roles['student'], $roles['teacher']);
+        reset_course_userdata($resetdata);
+
+        $usersroles = enrol_get_course_users_roles($course->id);
+        $this->assertEmpty($usersroles);
     }
 
     public function test_course_check_module_updates_since() {
@@ -4985,6 +5021,7 @@ class core_course_courselib_testcase extends advanced_testcase {
      * Test the course_get_recent_courses function.
      */
     public function test_course_get_recent_courses() {
+        global $DB;
 
         $this->resetAfterTest();
         $generator = $this->getDataGenerator();
@@ -5007,9 +5044,15 @@ class core_course_courselib_testcase extends advanced_testcase {
         // No course accessed.
         $this->assertCount(0, $result);
 
+        $time = time();
         foreach ($courses as $course) {
             $context = context_course::instance($course->id);
             course_view($context);
+            $DB->set_field('user_lastaccess', 'timeaccess', $time, [
+                'userid' => $student->id,
+                'courseid' => $course->id,
+                ]);
+            $time++;
         }
 
         // Every course accessed.
@@ -5020,10 +5063,10 @@ class core_course_courselib_testcase extends advanced_testcase {
         $result = course_get_recent_courses($student->id, 2);
         $this->assertCount(2, $result);
 
-        // Every course accessed, with limit and offset. Should return only the last created course ($course[2]).
+        // Every course accessed, with limit and offset should return the first course.
         $result = course_get_recent_courses($student->id, 3, 2);
         $this->assertCount(1, $result);
-        $this->assertArrayHasKey($courses[2]->id, $result);
+        $this->assertArrayHasKey($courses[0]->id, $result);
 
         // Every course accessed, order by shortname DESC. The last create course ($course[2]) should have the greater shortname.
         $result = course_get_recent_courses($student->id, 0, 0, 'shortname DESC');
